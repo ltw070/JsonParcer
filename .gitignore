@@ -8,3 +8,5 @@ dist/
 build/
 output/
 .env
+.claude/settings.local.json
+data/
