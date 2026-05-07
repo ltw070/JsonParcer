@@ -294,11 +294,13 @@ JsonParcer/
 ├── data/
 │   └── records.json       # 런타임 자동 생성
 ├── tests/
-│   ├── test_models.py
-│   ├── test_repository.py
-│   ├── test_parser.py
-│   ├── test_writer.py
-│   └── test_validator.py
+│   ├── test_models.py        # Unit — models
+│   ├── test_repository.py    # Unit — repository
+│   ├── test_parser.py        # Unit — json_lib parser
+│   ├── test_writer.py        # Unit — json_lib writer
+│   ├── test_validator.py     # Unit — json_lib validator
+│   ├── test_regression.py    # Regression — CRUD 정상 흐름
+│   └── test_safety.py        # Safety — 비정상 입력·경계값
 ├── docs/
 │   └── design/
 │       ├── Step1.md
@@ -307,6 +309,7 @@ JsonParcer/
 │       └── Step4.md
 ├── CLAUDE.md
 ├── AppDevPlan.md
+├── Test.md                    # Regression / Safety 테스트 계획
 ├── Spec.md
 ├── plan.md
 └── README.md
@@ -314,56 +317,157 @@ JsonParcer/
 
 ---
 
-## 테스트 실행
+## 테스트
+
+### 테스트 구성
+
+| 파일 | 종류 | 수 | 내용 |
+|------|------|----|------|
+| `test_models.py` | Unit | 6 | 레코드 생성 헬퍼 |
+| `test_repository.py` | Unit | 17 | CRUD 비즈니스 로직 |
+| `test_parser.py` | Unit | 7 | JSON 파싱 |
+| `test_writer.py` | Unit | 7 | JSON 저장 |
+| `test_validator.py` | Unit | 5 | 스키마 검증 |
+| `test_regression.py` | Regression | 25 | CRUD 정상 흐름 전체 |
+| `test_safety.py` | Safety | 23 | 비정상 입력·경계값·파일 손상 |
+| **합계** | | **90** | |
+
+### 실행
 
 ```bash
-pip install pytest
+# 전체
 pytest tests/ -v
+
+# Regression / Safety만
+pytest tests/test_regression.py tests/test_safety.py -v
 ```
 
-```
-tests/test_models.py::test_create_record_returns_dict               PASSED
-tests/test_models.py::test_create_record_has_all_fields             PASSED
-tests/test_models.py::test_create_record_id_is_uuid_string          PASSED
-tests/test_models.py::test_create_record_name_email_phone_match_input PASSED
-tests/test_models.py::test_create_record_created_at_is_iso_string   PASSED
-tests/test_models.py::test_create_record_ids_are_unique             PASSED
-tests/test_parser.py::test_parse_dict                               PASSED
-tests/test_parser.py::test_parse_list                               PASSED
-tests/test_parser.py::test_parse_invalid_json                       PASSED
-tests/test_parser.py::test_parse_non_string                         PASSED
-tests/test_parser.py::test_load_file                                PASSED
-tests/test_parser.py::test_load_file_not_found                      PASSED
-tests/test_parser.py::test_load_invalid_content                     PASSED
-tests/test_repository.py::test_get_all_empty_when_no_file           PASSED
-tests/test_repository.py::test_get_all_returns_all_records          PASSED
-tests/test_repository.py::test_find_by_id_found                     PASSED
-tests/test_repository.py::test_find_by_id_not_found                 PASSED
-tests/test_repository.py::test_find_by_name_found                   PASSED
-tests/test_repository.py::test_find_by_name_not_found              PASSED
-tests/test_repository.py::test_create_adds_record                   PASSED
-tests/test_repository.py::test_create_returns_new_record            PASSED
-tests/test_repository.py::test_create_persists_to_file              PASSED
-tests/test_repository.py::test_update_name                          PASSED
-tests/test_repository.py::test_update_email                         PASSED
-tests/test_repository.py::test_update_phone                         PASSED
-tests/test_repository.py::test_update_not_found                     PASSED
-tests/test_repository.py::test_update_invalid_field                 PASSED
-tests/test_repository.py::test_delete_removes_record                PASSED
-tests/test_repository.py::test_delete_returns_deleted_record        PASSED
-tests/test_repository.py::test_delete_not_found                     PASSED
-tests/test_validator.py::test_validate_success                      PASSED
-tests/test_validator.py::test_validate_missing_key                  PASSED
-tests/test_validator.py::test_validate_wrong_type                   PASSED
-tests/test_validator.py::test_validate_error_message_key            PASSED
-tests/test_validator.py::test_validate_error_message_type           PASSED
-tests/test_writer.py::test_save_creates_file                        PASSED
-tests/test_writer.py::test_save_creates_directories                 PASSED
-tests/test_writer.py::test_save_content_correct                     PASSED
-tests/test_writer.py::test_save_overwrite_false                     PASSED
-tests/test_writer.py::test_save_overwrite_true                      PASSED
-tests/test_writer.py::test_save_non_serializable                    PASSED
-tests/test_writer.py::test_save_korean                              PASSED
+---
 
-42 passed
+## Regression & Safety Test
+
+> 상세 계획: [`Test.md`](Test.md)
+
+### 목적
+
+| 구분 | 목적 |
+|------|------|
+| **Regression** | 기능 변경 후에도 기존 CRUD 동작이 깨지지 않음을 보장 |
+| **Safety** | 비정상 입력·손상 파일·경계값에서 앱이 안전하게 동작함을 보장 |
+
+### Regression 테스트 목록 (`test_regression.py` — 25개)
+
+**R-Create**
+
+| ID | 검증 내용 |
+|----|-----------|
+| R-C1 | 반환 레코드에 5개 필드 모두 포함 |
+| R-C2 | 저장 후 파일을 직접 읽어도 동일 레코드 존재 |
+| R-C3 | 여러 건 생성 시 누적 저장 (덮어쓰기 안 됨) |
+| R-C4 | 연속 생성 시 ID가 항상 다름 |
+
+**R-Read**
+
+| ID | 검증 내용 |
+|----|-----------|
+| R-R1 | 파일 없을 때 `[]` 반환 |
+| R-R2 | 생성 후 `get_all` 개수 일치 |
+| R-R3 | 전체 ID로 검색 성공 |
+| R-R4 | ID 앞자리 8자로 검색 성공 |
+| R-R5 | 없는 ID → `None` |
+| R-R6 | 정확한 이름 검색 |
+| R-R7 | 부분 이름 검색 (포함 여부) |
+| R-R8 | 없는 이름 → `[]` |
+
+**R-Update**
+
+| ID | 검증 내용 |
+|----|-----------|
+| R-U1 | name 수정 후 재확인 |
+| R-U2 | email 수정 후 재확인 |
+| R-U3 | phone 수정 후 재확인 |
+| R-U4 | 수정 후 파일에도 반영됨 |
+| R-U5 | 수정 대상 외 레코드는 변경 없음 |
+
+**R-Delete**
+
+| ID | 검증 내용 |
+|----|-----------|
+| R-D1 | 삭제 후 `get_all` 개수 감소 |
+| R-D2 | 삭제된 레코드 반환 |
+| R-D3 | 삭제 후 파일에도 반영 |
+| R-D4 | 삭제 대상 외 레코드는 유지 |
+
+**R-Menu (UI 레이어)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| R-M1 | 빈 목록 시 안내 문구 출력 |
+| R-M2 | 목록 출력 시 레코드 수 표시 |
+| R-M3 | 정상 입력 시 저장 완료 메시지 |
+| R-M4 | `n` 입력 시 삭제 취소 메시지 |
+
+---
+
+### Safety 테스트 목록 (`test_safety.py` — 23개)
+
+**S-Input (입력값 경계)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-I1 | 특수문자 포함 이름 저장·복원 정확성 |
+| S-I2 | 이모지 포함 이름 저장·복원 정확성 |
+| S-I3 | 1000자 문자열 저장·복원 정확성 |
+| S-I4 | `<script>` 포함 이름 — 이스케이프 없이 저장, 그대로 복원 |
+| S-I5 | `"`, `\`, `'` 포함 — JSON 직렬화 안전성 |
+| S-I6 | 개행 문자 포함 — 직렬화·역직렬화 안전성 |
+
+**S-NotFound (없는 대상 접근)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-N1 | 없는 ID 수정 → `RecordNotFoundError` |
+| S-N2 | 없는 ID 삭제 → `RecordNotFoundError` |
+| S-N3 | 빈 문자열 prefix → 첫 번째 레코드 반환 |
+
+**S-InvalidField (수정 불가 필드)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-F1 | `id` 필드 수정 → `InvalidFieldError` |
+| S-F2 | `created_at` 필드 수정 → `InvalidFieldError` |
+| S-F3 | 존재하지 않는 필드 수정 → `InvalidFieldError` |
+
+**S-FileCorrupt (파일 손상)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-FC1 | 손상된 JSON 파일 → `JsonParseError`, 앱 비정상 종료 없음 |
+| S-FC2 | 빈 파일 → `JsonParseError` |
+| S-FC3 | 배열이 아닌 JSON 객체 파일 → 타입 오류 안전 처리 |
+
+**S-Boundary (경계값)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-B1 | 마지막 레코드 삭제 → 파일이 빈 배열 `[]`로 저장 |
+| S-B2 | 100건 연속 생성 후 `get_all` 개수 정확성 |
+| S-B3 | 동일 이름 중복 생성 허용 여부 확인 |
+| S-B4 | ID 접두사 중복 → 첫 번째 레코드 반환 |
+
+**S-Menu (UI 안전성)**
+
+| ID | 검증 내용 |
+|----|-----------|
+| S-M1 | 없는 ID 수정 → 오류 메시지 출력, 예외 전파 없음 |
+| S-M2 | 없는 ID 삭제 → 오류 메시지 출력, 예외 전파 없음 |
+| S-M3 | 검색 결과 없음 → 안내 메시지 출력 |
+| S-M4 | 수정 필드 잘못된 번호 → 안내 메시지 출력 |
+
+---
+
+### 전체 테스트 결과
+
+```
+90 passed
 ```
